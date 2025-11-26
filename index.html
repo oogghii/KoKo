@@ -1,68 +1,59 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>My Kanban Board</title>
-    <!-- Tailwind CSS -->
+    <title>KoKo - Tableau de Projet</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Phosphor Icons -->
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
-    <!-- Google Fonts -->
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 
-    <!-- Supabase JS (UMD build) -->
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.min.js"></script>
 
     <link href="style.css" rel="stylesheet">
 </head>
 <body class="h-screen w-screen overflow-hidden flex flex-col text-slate-800">
 
-    <!-- Header -->
     <header class="h-14 px-6 flex items-center justify-between glass text-white shadow-sm z-10 flex-shrink-0">
         <div class="flex items-center gap-2">
             <i class="ph-fill ph-kanban text-3xl text-blue-100"></i>
-            <h1 class="font-bold text-xl tracking-tight">Project Board</h1>
-            <!-- Loading Indicator -->
+            <h1 class="font-bold text-xl tracking-tight">KoKo</h1>
             <div id="sync-status" class="hidden ml-2 text-xs bg-white/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                <i class="ph ph-arrows-clockwise animate-spin"></i> Syncing...
+                <i class="ph ph-arrows-clockwise animate-spin"></i> Synchronisation...
             </div>
         </div>
         <div class="flex items-center gap-3">
-            <button onclick="shareBoard()" class="flex items-center gap-2 text-sm bg-blue-600/90 hover:bg-blue-600 px-3 py-1.5 rounded transition font-medium shadow-sm border border-transparent">
-                <i class="ph ph-share-network text-lg"></i> Share
+            <button onclick="shareBoard()" class="flex items-center gap-2 text-sm bg-blue-600/70 hover:bg-blue-600/90 px-3 py-1.5 rounded transition font-medium backdrop-blur-md">
+                <i class="ph ph-share-network text-lg"></i> Partager
             </button>
             <button onclick="openSettingsModal()" class="flex items-center gap-2 text-sm bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded transition font-medium backdrop-blur-md">
-                <i class="ph ph-gear-six text-lg"></i> Settings
+                <i class="ph ph-gear-six text-lg"></i> Paramètres
             </button>
             <button onclick="resetBoard()" class="flex items-center gap-2 text-sm bg-red-500/70 hover:bg-red-500/90 px-3 py-1.5 rounded transition font-medium text-white backdrop-blur-md">
-                <i class="ph ph-trash text-lg"></i> Reset
+                <i class="ph ph-trash text-lg"></i> Réinitialiser
             </button>
         </div>
     </header>
 
-    <!-- Main Board Area -->
     <main class="flex-1 overflow-x-auto overflow-y-hidden p-6 relative">
         <div id="board" class="flex items-start gap-4 h-full">
-            <!-- Columns injected via JS -->
             <div id="loading-spinner" class="absolute inset-0 flex items-center justify-center text-white">
                 <div class="flex flex-col items-center">
                     <i class="ph ph-spinner text-4xl animate-spin mb-2"></i>
-                    <p>Loading Board...</p>
+                    <p>Chargement du tableau...</p>
                 </div>
             </div>
 
-            <!-- Add Column Button Container (Will be moved by JS) -->
             <div id="add-col-container" class="flex-shrink-0 w-72 hidden">
                 <button onclick="showAddColumnInput(this)" id="add-col-btn" class="w-full h-12 rounded-xl bg-white/20 hover:bg-white/30 text-white font-medium flex items-center gap-2 px-4 transition backdrop-blur-sm border border-white/20">
-                    <i class="ph ph-plus text-lg"></i> Add another list
+                    <i class="ph ph-plus text-lg"></i> Ajouter une liste
                 </button>
                 <div id="add-col-form" class="hidden bg-slate-100 p-2 rounded-xl shadow-lg border border-slate-300">
-                    <input type="text" id="new-col-title" placeholder="Enter list title..."
+                    <input type="text" id="new-col-title" placeholder="Titre de la liste..."
                            class="w-full px-3 py-2 rounded-lg border-2 border-blue-500 focus:outline-none mb-2 text-sm font-medium"
                            onkeydown="if(event.key === 'Enter') createColumn()">
                     <div class="flex items-center gap-2">
-                        <button onclick="createColumn()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium">Add List</button>
+                        <button onclick="createColumn()" class="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded text-sm font-medium">Ajouter</button>
                         <button onclick="hideAddColumnInput()" class="text-slate-500 hover:text-slate-700 p-1.5"><i class="ph ph-x text-lg"></i></button>
                     </div>
                 </div>
@@ -70,76 +61,69 @@
         </div>
     </main>
 
-    <!-- Custom Toast -->
     <div id="toast" class="fixed bottom-6 left-1/2 transform -translate-x-1/2 bg-slate-800 text-white px-4 py-2 rounded-lg shadow-xl flex items-center gap-2 transition-all duration-300 opacity-0 translate-y-4 z-[100] pointer-events-none">
         <i class="ph-fill ph-check-circle text-green-400"></i>
-        <span id="toast-message" class="text-sm font-medium">Action successful</span>
+        <span id="toast-message" class="text-sm font-medium">Action réussie</span>
     </div>
 
-    <!-- Modals (Confirm, Settings, Edit Card) -->
-    <!-- Custom Confirm Modal -->
     <div id="confirm-modal" class="fixed inset-0 bg-black/60 hidden z-[70] flex items-center justify-center backdrop-blur-sm modal-animate">
         <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center">
             <div class="w-12 h-12 rounded-full bg-red-100 text-red-500 flex items-center justify-center mx-auto mb-4" id="confirm-icon">
                 <i class="ph-bold ph-warning text-2xl"></i>
             </div>
-            <h3 class="text-lg font-bold text-slate-800 mb-2" id="confirm-title">Are you sure?</h3>
-            <p class="text-sm text-slate-500 mb-6" id="confirm-message">This action cannot be undone.</p>
+            <h3 class="text-lg font-bold text-slate-800 mb-2" id="confirm-title">Êtes-vous sûr ?</h3>
+            <p class="text-sm text-slate-500 mb-6" id="confirm-message">Cette action est irréversible.</p>
             <div class="flex gap-3 justify-center">
-                <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-100 font-medium transition w-full">Cancel</button>
-                <button id="confirm-yes-btn" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold shadow-lg shadow-red-500/30 transition w-full">Delete</button>
+                <button onclick="closeConfirmModal()" class="px-4 py-2 rounded-lg text-slate-500 hover:bg-slate-100 font-medium transition w-full">Annuler</button>
+                <button id="confirm-yes-btn" class="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white font-bold shadow-lg shadow-red-500/30 transition w-full">Supprimer</button>
             </div>
         </div>
     </div>
 
-    <!-- Settings Modal -->
     <div id="settings-modal" class="fixed inset-0 bg-black/60 hidden z-[60] flex items-center justify-center backdrop-blur-sm" onclick="closeSettingsModal(event)">
         <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden modal-animate flex flex-col max-h-[85vh]">
             <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <h3 class="font-bold text-slate-700 flex items-center gap-2"><i class="ph-fill ph-gear-six"></i> Board Settings</h3>
+                <h3 class="font-bold text-slate-700 flex items-center gap-2"><i class="ph-fill ph-gear-six"></i> Paramètres du tableau</h3>
                 <button onclick="closeSettingsModal(null, true)" class="text-slate-400 hover:text-red-500 transition"><i class="ph ph-x-circle text-2xl"></i></button>
             </div>
             <div class="p-6 overflow-y-auto space-y-8">
-                <!-- Manage Labels -->
                 <div>
-                    <h4 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4">Manage Labels</h4>
+                    <h4 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4">Gérer les étiquettes</h4>
                     <div id="settings-labels-list" class="space-y-2 mb-4"></div>
                     <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
                         <div class="flex gap-2 mb-2">
-                            <input type="text" id="new-label-name" placeholder="New label name..." class="flex-1 px-3 py-1.5 text-sm rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none">
-                            <button onclick="addNewLabel()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-700">Add</button>
+                            <input type="text" id="new-label-name" placeholder="Nom de l'étiquette..." class="flex-1 px-3 py-1.5 text-sm rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none">
+                            <button onclick="addNewLabel()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-700">Ajouter</button>
                         </div>
                         <div class="flex gap-2 flex-wrap" id="label-color-picker"></div>
                         <input type="hidden" id="selected-label-color" value="blue">
                     </div>
                 </div>
                 <hr class="border-slate-100">
-                <!-- Manage Members -->
                 <div>
-                    <h4 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4">Manage Team</h4>
+                    <h4 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4">Gérer l'équipe</h4>
                     <div id="settings-members-list" class="space-y-2 mb-4"></div>
                     <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
                          <div class="flex gap-2 mb-2">
-                            <input type="text" id="new-member-name" placeholder="Member name..." class="flex-1 px-3 py-1.5 text-sm rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none">
-                            <button onclick="addNewMember()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-700">Add</button>
+                            <input type="text" id="new-member-name" placeholder="Nom du membre..." class="flex-1 px-3 py-1.5 text-sm rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none">
+                            <button onclick="addNewMember()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-700">Ajouter</button>
                         </div>
                     </div>
                 </div>
             </div>
             <div class="p-4 bg-slate-50 border-t border-slate-100 text-right">
-                <button onclick="closeSettingsModal(null, true)" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg text-sm font-medium transition">Done</button>
+                <button onclick="closeSettingsModal(null, true)" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg text-sm font-medium transition">Terminé</button>
             </div>
         </div>
     </div>
 
-    <!-- Edit Card Modal -->
     <div id="modal-overlay" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm" onclick="closeModal(event)">
         <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden modal-animate flex flex-col max-h-[90vh]">
             <div class="p-4 border-b border-slate-100 flex justify-between items-start bg-slate-50">
                 <div class="w-full mr-4">
-                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Card Title</label>
+                    <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Titre de la carte</label>
                     <input type="text" id="modal-title-input" class="w-full font-bold text-lg bg-transparent border border-transparent hover:border-slate-300 focus:border-blue-500 focus:bg-white rounded px-2 py-1 transition outline-none text-slate-800">
-                    <div class="text-xs text-slate-400 px-2 mt-1">In list <span id="modal-list-name" class="font-medium text-slate-600"></span></div>
+                    <div class="text-xs text-slate-400 px-2 mt-1">Dans la liste <span id="modal-list-name" class="font-medium text-slate-600"></span></div>
                 </div>
                 <button onclick="closeModal(null, true)" class="text-slate-400 hover:text-red-500 transition"><i class="ph ph-x-circle text-2xl"></i></button>
             </div>
@@ -150,29 +134,30 @@
                             <i class="ph ph-text-align-left text-slate-400 text-lg"></i>
                             <h3 class="font-bold text-slate-700">Description</h3>
                         </div>
-                        <textarea id="modal-desc-input" class="w-full h-40 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none text-slate-700 leading-relaxed text-sm placeholder-slate-400" placeholder="Add a more detailed description..."></textarea>
+                        <textarea id="modal-desc-input" class="w-full h-40 p-3 bg-slate-50 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none text-slate-700 leading-relaxed text-sm placeholder-slate-400" placeholder="Ajouter une description plus détaillée..."></textarea>
                     </div>
                 </div>
                 <div class="space-y-6">
                     <div>
-                        <h3 class="text-xs font-bold text-slate-500 uppercase mb-3 flex justify-between items-center">Labels <button onclick="openSettingsModal()" class="text-[10px] text-blue-500 hover:underline">Manage</button></h3>
+                        <h3 class="text-xs font-bold text-slate-500 uppercase mb-3 flex justify-between items-center">Étiquettes <button onclick="openSettingsModal()" class="text-[10px] text-blue-500 hover:underline">Gérer</button></h3>
                         <div class="flex flex-wrap gap-2" id="modal-labels-container"></div>
                     </div>
                     <div>
-                        <h3 class="text-xs font-bold text-slate-500 uppercase mb-3 flex justify-between items-center">Members <button onclick="openSettingsModal()" class="text-[10px] text-blue-500 hover:underline">Manage</button></h3>
+                        <h3 class="text-xs font-bold text-slate-500 uppercase mb-3 flex justify-between items-center">Membres <button onclick="openSettingsModal()" class="text-[10px] text-blue-500 hover:underline">Gérer</button></h3>
                         <div class="space-y-2" id="modal-members-container"></div>
                     </div>
                     <div>
                         <h3 class="text-xs font-bold text-slate-500 uppercase mb-3">Actions</h3>
-                        <button type="button" onclick="deleteCardFromModal()" class="w-full text-left bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2"><i class="ph ph-trash"></i> Delete Card</button>
+                        <button type="button" onclick="deleteCardFromModal()" class="w-full text-left bg-red-50 hover:bg-red-100 text-red-600 px-3 py-2 rounded-lg text-sm font-medium transition flex items-center gap-2"><i class="ph ph-trash"></i> Supprimer la carte</button>
                     </div>
                 </div>
             </div>
             <div class="p-4 bg-slate-50 border-t border-slate-100 flex justify-end gap-3">
-                <button onclick="closeModal(null, true)" class="text-slate-500 hover:bg-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition">Cancel</button>
-                <button onclick="saveCardFromModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/30 transition">Save Changes</button>
+                <button onclick="closeModal(null, true)" class="text-slate-500 hover:bg-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition">Annuler</button>
+                <button onclick="saveCardFromModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/30 transition">Enregistrer</button>
             </div>
         </div>
     </div>
+<script src="script.js"></script>
 </body>
 </html>

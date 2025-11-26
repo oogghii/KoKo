@@ -55,20 +55,22 @@ async function init() {
 }
 
 function setupBoard() {
-    // Determine Board ID from URL or generate new
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlId = urlParams.get('id');
+    // 1. On regarde s'il y a déjà un ID après le # (ex: #XY12Z9)
+    // .substring(1) sert à enlever le caractère '#' pour ne garder que le code
+    const hash = window.location.hash.substring(1);
 
-    if (urlId) {
-        currentBoardId = urlId;
+    if (hash && hash.length > 0) {
+        // Si un ID existe, on l'utilise
+        currentBoardId = hash;
     } else {
+        // 2. Sinon, on génère un nouvel ID de 6 caractères majuscules
         currentBoardId = generateId();
-        // Update URL without reload
-        const newUrl = window.location.protocol + "//" + window.location.host + window.location.pathname + '?id=' + currentBoardId;
-        window.history.pushState({path:newUrl},'',newUrl);
+        
+        // On met à jour l'URL (ça ajoute le # sans recharger la page)
+        window.location.hash = currentBoardId;
     }
 
-    // Connect to Supabase board row
+    // On se connecte à Supabase avec cet ID
     connectToBoard(currentBoardId);
 }
 
@@ -223,13 +225,12 @@ async function saveToFirebase() {
 const defaultBoardData = [
     {
         id: 'col-1',
-        title: 'To Do',
+        title: 'A faire!',
         cards: [
-            { id: 'card-1', content: 'Welcome! 👋', description: 'This board is now live and collaborative.', labels: ['l1'], members: ['m1'] },
+            { id: 'card-1', content: 'Salut! 👋', description: 'Clique sur partager pour travailler à plusieurs sur ce "KoKo".', labels: ['l1'], members: ['m1'] },
         ]
     },
-    { id: 'col-2', title: 'Doing', cards: [] },
-    { id: 'col-3', title: 'Done', cards: [] }
+    { id: 'col-2', title: 'Fait!', cards: [] },
 ];
 
 const defaultSettings = {
@@ -239,8 +240,7 @@ const defaultSettings = {
         { id: 'l3', colorName: 'green', name: 'Design' },
     ],
     members: [
-        { id: 'm1', name: 'Alex Doe', initials: 'AD', colorName: 'blue' },
-        { id: 'm2', name: 'Sam Smith', initials: 'SS', colorName: 'emerald' },
+        { id: 'm1', name: 'Par Defaut', initials: 'D', colorName: 'blue' },
     ]
 };
 
@@ -270,7 +270,12 @@ const AVATAR_COLORS = {
  * HELPERS
  */
 function generateId() {
-    return Math.random().toString(36).substr(2, 9);
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+    let result = '';
+    for (let i = 0; i < 6; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return result;
 }
 
 function getInitials(name) {
@@ -362,7 +367,7 @@ function renderBoard() {
         colEl.addEventListener('drop', handleDrop);
 
         colEl.innerHTML = `
-            <div class="bg-slate-100 rounded-xl shadow-lg flex flex-col max-h-full border border-slate-300/50">
+            <div class="bg-white/20 backdrop-blur-md rounded-xl shadow-lg flex flex-col max-h-full border border-white/40">
                 <div class="p-3 flex justify-between items-start gap-2 cursor-grab active:cursor-grabbing group">
                     <textarea 
                         onblur="updateColumnTitle('${col.id}', this.value)" 
@@ -374,11 +379,11 @@ function renderBoard() {
                         <i class="ph ph-trash"></i>
                     </button>
                 </div>
-                <div class="flex-1 overflow-y-auto px-2 pb-2 custom-scrollbar min-h-[50px]" id="cards-${col.id}"></div>
+                <div class="flex-1 overflow-y-auto px-2 pb-2 custom-scrollbar" id="cards-${col.id}"></div>
                 <div class="p-2 pt-0">
                      <div id="add-card-btn-${col.id}">
-                        <button onclick="showAddCardInput('${col.id}')" class="w-full text-left text-slate-500 hover:bg-slate-200 hover:text-slate-700 p-2 rounded-lg transition flex items-center gap-2 text-sm font-medium">
-                            <i class="ph ph-plus"></i> Add a card
+                        <button onclick="showAddCardInput('${col.id}')" class="w-full text-left text-slate-600 hover:bg-white/60 hover:text-slate-900 p-2 rounded-lg transition flex items-center gap-2 text-sm font-medium">
+                            <i class="ph ph-plus"></i> Ajouter une carte
                         </button>
                     </div>
                     <div id="add-card-form-${col.id}" class="hidden">
