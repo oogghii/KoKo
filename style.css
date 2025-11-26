@@ -1,0 +1,23 @@
+body {
+    font-family: 'Inter', sans-serif;
+    background-image: url('https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?q=80&w=2564&auto=format&fit=crop');
+    background-size: cover;
+    background-position: center;
+}
+
+/* Custom Scrollbar */
+.scrollbar-hide::-webkit-scrollbar { height: 12px; }
+.scrollbar-hide::-webkit-scrollbar-track { background: rgba(0,0,0,0.1); border-radius: 10px; }
+.scrollbar-hide::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.3); border-radius: 10px; }
+.scrollbar-hide::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.5); }
+
+.custom-scrollbar::-webkit-scrollbar { width: 6px; }
+.custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
+.custom-scrollbar::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.1); border-radius: 3px; }
+.custom-scrollbar:hover::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.2); }
+
+.dragging { opacity: 0.5; transform: rotate(2deg); }
+.card-ghost { background: #f3f4f6; border: 2px dashed #cbd5e1; border-radius: 0.5rem; margin-bottom: 0.75rem; height: 80px; }
+.glass { background: rgba(255, 255, 255, 0.25); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); border: 1px solid rgba(255, 255, 255, 0.3); }
+@keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+.modal-animate { animation: fadeIn 0.15s ease-out forwards; }
