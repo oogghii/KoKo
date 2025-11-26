@@ -39,18 +39,23 @@ async function init() {
         document.getElementById('loading-spinner').innerText = 'Supabase not initialized';
         return;
     }
+    setupOTPInputs();
+    renderHistoryUI();
     setupBoard();
 }
 
 function setupBoard() {
     const hash = window.location.hash.substring(1);
+    
+    // Si un code est présent dans l'URL, on charge direct
     if (hash && hash.length > 0) {
         currentBoardId = hash;
+        connectToBoard(currentBoardId);
     } else {
-        currentBoardId = generateId();
-        window.location.hash = currentBoardId;
+        // Sinon, on cache le spinner de chargement et on montre la Landing Page
+        document.getElementById('loading-spinner').classList.add('hidden');
+        document.getElementById('landing-modal').classList.remove('hidden');
     }
-    connectToBoard(currentBoardId);
 }
 
 async function connectToBoard(boardId) {
@@ -76,6 +81,7 @@ async function connectToBoard(boardId) {
             boardData = data.board_data || [];
             settings = data.settings || defaultSettings;
             renderBoard();
+            addToHistory(boardId);
 
             if(!document.getElementById('settings-modal').classList.contains('hidden')) renderSettingsList();
             if(currentEditCardId && !document.getElementById('modal-overlay').classList.contains('hidden')) renderModalSidebars();
@@ -195,6 +201,7 @@ const defaultBoardData = [
 ];
 
 const defaultSettings = {
+    boardTitle: "Mon Nouveau Tralalero",
     labels: [
         { id: 'l1', colorName: 'red', name: 'Urgent' },
         { id: 'l2', colorName: 'blue', name: 'Dev' },
@@ -243,15 +250,59 @@ function getInitials(name) {
     return name.match(/(\b\S)?/g).join("").match(/(^\S|\S$)?/g).join("").toUpperCase();
 }
 
+/**
+ * SHARE MODAL LOGIC
+ */
 function shareBoard() {
-    const url = window.location.href;
-    const el = document.createElement('textarea');
-    el.value = url;
-    document.body.appendChild(el);
-    el.select();
-    document.execCommand('copy');
-    document.body.removeChild(el);
-    showToast("Link copied to clipboard!", "green");
+    if (!currentBoardId) return;
+
+    // 1. Remplir le code dans la modale
+    const codeDisplay = document.getElementById('share-code-display');
+    codeDisplay.innerText = currentBoardId;
+
+    // 2. Afficher la modale
+    document.getElementById('share-modal').classList.remove('hidden');
+}
+
+function closeShareModal(e, force) {
+    // Ferme si on clique sur le fond (overlay) ou sur le bouton croix (force)
+    if (force || e.target.id === 'share-modal') {
+        document.getElementById('share-modal').classList.add('hidden');
+    }
+}
+
+function copyCodeAction() {
+    // 1. On construit l'URL complète : https://site.com/ + # + A1B2C3
+    // window.location.origin = https://tonsiteweb.com
+    // window.location.pathname = / (ou /dossier/ si ce n'est pas à la racine)
+    const fullUrl = `${window.location.origin}${window.location.pathname}#${currentBoardId}`;
+
+    // 2. Copie le LIEN dans le presse-papier
+    navigator.clipboard.writeText(fullUrl).then(() => {
+        
+        // Ferme la modale
+        document.getElementById('share-modal').classList.add('hidden');
+        
+        // Affiche le petit toast vert (J'ai changé "Code" par "Lien" pour être précis)
+        showToast("Lien copié ! Envoyez-le à votre équipe.", "green");
+        
+    }).catch(err => {
+        console.error('Erreur copie:', err);
+        showToast("Erreur lors de la copie", "red");
+    });
+}
+
+function updateBoardTitle(val) {
+    const cleanVal = val.trim();
+    if (cleanVal && settings.boardTitle !== cleanVal) {
+        settings.boardTitle = cleanVal;
+        document.title = `${cleanVal} - Tralalero`; // Change le titre de l'onglet du navigateur
+        saveToFirebase(); // Sauvegarde et synchronise
+        addToHistory(currentBoardId); // Met à jour l'historique local avec le nouveau nom
+    } else if (!cleanVal) {
+        // Si vide, on remet l'ancien nom
+        document.getElementById('board-title-input').value = settings.boardTitle || "Projet Sans Titre";
+    }
 }
 
 function showToast(msg, color = "green") {
@@ -310,6 +361,16 @@ function closeConfirmModal() {
  * RENDER BOARD
  */
 function renderBoard() {
+    // --- AJOUTER CE BLOC AU DÉBUT DE LA FONCTION ---
+    const titleInput = document.getElementById('board-title-input');
+    const currentTitle = settings.boardTitle || "Projet Sans Titre";
+    
+    // On met à jour l'input seulement s'il n'a pas le focus (pour ne pas gêner la frappe)
+    if (document.activeElement !== titleInput) {
+        titleInput.value = currentTitle;
+        document.title = `${currentTitle} - Tralalero`;
+    }
+
     const boardEl = document.getElementById('board');
     const addBtnContainer = document.getElementById('add-col-container');
     const existingCols = boardEl.querySelectorAll('[data-col-id]');
@@ -586,14 +647,6 @@ function addCard(colId) {
     hideAddCardInput(colId); 
 }
 
-function resetBoard() {
-    showConfirm("Reset Board?", "This will wipe the current board data.", () => {
-         boardData = defaultBoardData; settings = defaultSettings;
-         renderBoard(); // <--- FIX: Show instantly
-         saveToFirebase();
-    });
-}
-
 /**
  * DRAG & DROP SYSTEM (Cards + Columns)
  */
@@ -742,5 +795,357 @@ function getDragAfterCard(container, y) {
     }, { offset: Number.NEGATIVE_INFINITY }).element;
 }
 
-// Start App
+/**
+ * LANDING PAGE LOGIC
+ */
+
+async function createNewBoardAction() {
+    const newId = generateId();
+    currentBoardId = newId;
+    window.location.hash = newId;
+
+    // 1. UI Immédiate : On ferme le modal et on montre le loader un court instant
+    document.getElementById('landing-modal').classList.add('hidden');
+    
+    // 2. IMPORTANT : On charge les données par défaut localement TOUT DE SUITE
+    // On utilise JSON.parse/stringify pour créer une "copie profonde" et éviter les bugs de référence
+    boardData = JSON.parse(JSON.stringify(defaultBoardData));
+    settings = JSON.parse(JSON.stringify(defaultSettings));
+
+    // 3. On affiche le tableau immédiatement (Optimistic UI)
+    renderBoard();
+    if(!document.getElementById('settings-modal').classList.contains('hidden')) renderSettingsList();
+    
+    // On montre l'interface principale (au cas où elle était cachée)
+    document.getElementById('loading-spinner').classList.add('hidden');
+    document.getElementById('add-col-container').classList.remove('hidden');
+
+    // 4. On sauvegarde dans la base de données en arrière-plan
+    // On appelle initializeNewBoard mais on n'a pas besoin d'attendre la réponse pour afficher l'UI
+    try {
+        await initializeNewBoard(newId);
+        
+        // 5. Une fois créé, on se connecte au canal temps réel pour les futures mises à jour
+        connectToBoard(newId); 
+    } catch (e) {
+        console.error("Erreur lors de la création initiale", e);
+        showToast("Erreur lors de la création du tableau", "red");
+    }
+}
+
+async function checkAndJoinBoard() {
+    const errorMsg = document.getElementById('join-error');
+    
+    // Récupération du code (comme vu avant)
+    const inputs = document.querySelectorAll('.otp-input');
+    let code = '';
+    inputs.forEach(input => {
+        code += input.value.trim();
+        input.classList.remove('border-red-500', 'ring-red-500');
+    });
+    code = code.toUpperCase();
+
+    // Reset UI
+    errorMsg.classList.add('hidden');
+
+    if (!code || code.length < 6) {
+        showJoinError("Le code doit contenir 6 caractères.");
+        return;
+    }
+
+    // --- UI Loading state (Adapté) ---
+    inputs.forEach(i => i.disabled = true);
+
+    try {
+        const { data, error } = await supabase
+            .from(TABLE_NAME)
+            .select('id')
+            .eq('id', code)
+            .single();
+
+        if (error || !data) {
+            showJoinError("Ce tableau n'existe pas.");
+            
+            inputs.forEach(i => {
+                i.disabled = false;
+                i.value = '';
+            });
+            inputs[0].focus();
+        } else {
+            
+            currentBoardId = code;
+            window.location.hash = code;
+            
+            // Petit délai esthétique pour voir le "Connecté"
+            setTimeout(() => {
+                document.getElementById('landing-modal').classList.add('hidden');
+                document.getElementById('loading-spinner').classList.remove('hidden');
+                connectToBoard(code);
+                // Réactiver les inputs pour la prochaine fois (si logout)
+                inputs.forEach(i => i.disabled = false);
+            }, 500);
+        }
+
+    } catch (err) {
+        console.error(err);
+        showJoinError("Erreur de connexion.");
+        inputs.forEach(i => i.disabled = false);
+    }
+}
+
+// MODIFIER showJoinError pour colorer les 6 cases en rouge
+function showJoinError(msg) {
+    const errorMsg = document.getElementById('join-error');
+    errorMsg.innerText = msg;
+    errorMsg.classList.remove('hidden');
+    
+    // Ajoute une bordure rouge aux inputs
+    const inputs = document.querySelectorAll('.otp-input');
+    inputs.forEach(input => input.classList.add('border-red-500', 'ring-1', 'ring-red-500'));
+}
+
+function setupOTPInputs() {
+    const container = document.getElementById('otp-container');
+    if(!container) return;
+    
+    const inputs = container.querySelectorAll('.otp-input');
+
+    inputs.forEach((input, index) => {
+        // 1. Gérer la saisie
+        input.addEventListener('input', (e) => {
+            const val = e.target.value;
+            
+            // Si on a tapé un caractère
+            if (val.length === 1) {
+                // Focus le suivant si existe
+                if (index < inputs.length - 1) {
+                    inputs[index + 1].focus();
+                } else {
+                    // C'était le dernier ? On tente de valider
+                    checkAndJoinBoard();
+                }
+            } 
+            // Cas particulier : si l'utilisateur tape vite ou système autocomplete
+            else if (val.length > 1) {
+                e.target.value = val[0]; // On garde que le premier char
+                if (index < inputs.length - 1) inputs[index + 1].focus();
+            }
+        });
+
+        // 2. Gérer le Backspace et les flèches
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace' && !e.target.value) {
+                if (index > 0) {
+                    inputs[index - 1].focus();
+                }
+            }
+            if (e.key === 'ArrowLeft' && index > 0) {
+                inputs[index - 1].focus();
+            }
+            if (e.key === 'ArrowRight' && index < inputs.length - 1) {
+                inputs[index + 1].focus();
+            }
+            if (e.key === 'Enter') {
+                checkAndJoinBoard();
+            }
+        });
+
+        // 3. Gérer le Coller (Paste) d'un code complet (ex: "A1B2C3")
+        input.addEventListener('paste', (e) => {
+            e.preventDefault();
+            const pasteData = (e.clipboardData || window.clipboardData).getData('text');
+            const cleanData = pasteData.replace(/[^a-zA-Z0-9]/g, '').toUpperCase().slice(0, 6);
+            
+            if (cleanData) {
+                cleanData.split('').forEach((char, i) => {
+                    if (inputs[i]) inputs[i].value = char;
+                });
+                
+                // Focus sur la dernière case remplie ou la suivante vide
+                const nextEmptyIndex = cleanData.length < 6 ? cleanData.length : 5;
+                inputs[nextEmptyIndex].focus();
+
+                // Si complet, on lance
+                if (cleanData.length === 6) {
+                    checkAndJoinBoard();
+                }
+            }
+        });
+
+        // Force Uppercase visuel à la saisie
+        input.addEventListener('keyup', function() {
+            this.value = this.value.toUpperCase();
+        });
+    });
+}
+
+/**
+ * HISTORY MANAGER (LocalStorage)
+ */
+function addToHistory(boardId) {
+    if (!boardId) return;
+    
+    let history = JSON.parse(localStorage.getItem('tralalero_history') || '[]');
+    
+    // On récupère le titre actuel (ou "Projet inconnu" si pas encore chargé)
+    const title = (settings && settings.boardTitle) ? settings.boardTitle : "Chargement...";
+
+    const entry = {
+        id: boardId,
+        title: title, // <--- On sauvegarde le titre
+        date: new Date().toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })
+    };
+
+    // Supprimer l'ancienne entrée pour cet ID
+    history = history.filter(h => h.id !== boardId);
+    
+    // Ajouter au début
+    history.unshift(entry);
+    
+    if (history.length > 5) history.pop();
+    
+    localStorage.setItem('tralalero_history', JSON.stringify(history));
+    
+    // Si on est encore sur la page d'accueil, on rafraichit la liste
+    renderHistoryUI(); 
+}
+
+function renderHistoryUI() {
+    const history = JSON.parse(localStorage.getItem('tralalero_history') || '[]');
+    const container = document.getElementById('history-container');
+    const listItemsContainer = document.getElementById('history-list-items');
+    
+    // Si pas d'historique, on cache tout
+    if (history.length === 0) {
+        container.classList.add('hidden');
+        return;
+    }
+
+    // Sinon, on affiche
+    container.classList.remove('hidden');
+    listItemsContainer.innerHTML = ''; // On vide la liste
+
+    history.forEach(item => {
+        const displayTitle = item.title ? item.title : `Code: ${item.id}`;
+        
+        // Création de l'élément visuel
+        const el = document.createElement('button');
+        el.className = "w-full text-left px-3 py-3 rounded-lg text-white/90 bg-slate-700 hover:text-white transition flex items-center gap-3 group";
+        el.onclick = () => selectHistoryItem(item.id);
+        
+        el.innerHTML = `
+            <div class="w-8 h-8 rounded-full bg-indigo-500/30 flex items-center justify-center border border-white/10 group-hover:border-white/30 transition">
+                <i class="ph-fill ph-kanban text-indigo-300"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <div class="font-bold text-sm truncate">${displayTitle}</div>
+                <div class="text-[10px] text-white/50 font-mono tracking-wider">CODE: ${item.id} • ${item.date}</div>
+            </div>
+            <i class="ph-bold ph-arrow-right opacity-0 -translate-x-2 group-hover:opacity-100 group-hover:translate-x-0 transition"></i>
+        `;
+        listItemsContainer.appendChild(el);
+    });
+}
+
+function toggleHistoryDropdown() {
+    const dropdown = document.getElementById('history-dropdown');
+    const icon = document.querySelector('#history-trigger i');
+    
+    if (dropdown.classList.contains('hidden')) {
+        // Ouvrir
+        dropdown.classList.remove('hidden');
+        dropdown.classList.add('animate-fade-in-down'); // Assure-toi que cette classe existe ou utilise une transition simple
+        icon.classList.add('rotate-180');
+    } else {
+        // Fermer
+        dropdown.classList.add('hidden');
+        dropdown.classList.remove('animate-fade-in-down');
+        icon.classList.remove('rotate-180');
+    }
+}
+
+function selectHistoryItem(boardId) {
+    // 1. Fermer le menu
+    toggleHistoryDropdown();
+    
+    // 2. Mettre à jour le texte du bouton (feedback visuel)
+    document.getElementById('history-selected-text').innerText = "Chargement...";
+    
+    // 3. Charger
+    loadFromHistory(boardId);
+}
+
+window.addEventListener('click', function(e) {
+    const container = document.getElementById('history-container');
+    const dropdown = document.getElementById('history-dropdown');
+    const trigger = document.getElementById('history-trigger');
+    
+    if (!container.contains(e.target) && !dropdown.classList.contains('hidden')) {
+        dropdown.classList.add('hidden');
+        trigger.querySelector('i').classList.remove('rotate-180');
+    }
+});
+
+function loadFromHistory(val) {
+    if (!val) return;
+    
+    // Simuler le remplissage des inputs OTP
+    const inputs = document.querySelectorAll('.otp-input');
+    val.split('').forEach((char, i) => {
+        if(inputs[i]) inputs[i].value = char;
+    });
+    
+    // Lancer la connexion
+    checkAndJoinBoard();
+}
+
+function leaveBoard() {
+    // On enlève le hash de l'URL et on recharge la page
+    window.location.hash = '';
+    window.location.reload();
+}
+
+async function deleteBoardAction() {
+    if (!currentBoardId) return;
+
+    // On utilise ta modale de confirmation existante
+    showConfirm(
+        "Supprimer définitivement ?", 
+        "Attention : Ce projet sera effacé pour tout le monde. Cette action est irréversible.", 
+        async () => {
+            // 1. Suppression dans Supabase
+            const { error } = await supabase
+                .from(TABLE_NAME)
+                .delete()
+                .eq('id', currentBoardId);
+
+            if (error) {
+                console.error('Erreur de suppression:', error);
+                showToast("Erreur lors de la suppression.", "red");
+                return;
+            }
+
+            // 2. Suppression de l'historique local (LocalStorage)
+            removeFromHistory(currentBoardId);
+
+            // 3. Feedback visuel et retour accueil
+            showToast("Projet supprimé avec succès.", "green");
+            
+            // Petit délai pour lire le message avant de recharger
+            setTimeout(() => {
+                leaveBoard(); // Retour à la case départ
+            }, 1000);
+        }, 
+        true // isDestructive = true (bouton rouge dans la modale)
+    );
+}
+
+// Petite fonction utilitaire pour nettoyer le localStorage
+function removeFromHistory(boardId) {
+    let history = JSON.parse(localStorage.getItem('tralalero_history') || '[]');
+    // On garde tout SAUF l'id qu'on vient de supprimer
+    history = history.filter(h => h.id !== boardId);
+    localStorage.setItem('tralalero_history', JSON.stringify(history));
+}
+
 init();

@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-    <title>Tralalero - Tableau de Projet</title>
+    <title>Tralalero Tralala</title>
+    <link rel="icon" type="image/png" href="logo.png">
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/@phosphor-icons/web"></script>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -16,8 +17,19 @@
 
     <header class="h-14 px-6 flex items-center justify-between glass text-white shadow-sm z-10 flex-shrink-0">
         <div class="flex items-center gap-2">
-            <i class="ph-fill ph-kanban text-3xl text-blue-100"></i>
-            <h1 class="font-bold text-xl tracking-tight">Tralalero</h1>
+            <img src="logo.png" alt="Logo" class="w-8 h-8 rounded-full object-cover border border-blue-200/50 shadow-sm">
+            <div class="relative flex items-center gap-2 group">
+                <input type="text" 
+                    id="board-title-input" 
+                    class="font-bold text-xl tracking-tight bg-transparent border border-transparent hover:border-white/20 focus:border-white/50 focus:bg-white/10 rounded px-2 py-0.5 outline-none text-white placeholder-blue-200 transition w-64 truncate leading-tight"
+                    placeholder="Nom du projet..."
+                    onblur="updateBoardTitle(this.value)"
+                    onkeydown="if(event.key === 'Enter') this.blur()">
+                    
+                <i class="ph-fill ph-pencil-simple text-white/40 opacity-0 group-hover:opacity-100 transition-all duration-200 cursor-pointer hover:text-white"
+                onclick="document.getElementById('board-title-input').focus()">
+                </i>
+            </div>
             <div id="sync-status" class="hidden ml-2 text-xs bg-white/20 px-2 py-0.5 rounded-full flex items-center gap-1">
                 <i class="ph ph-arrows-clockwise animate-spin"></i> Synchronisation...
             </div>
@@ -27,10 +39,14 @@
                 <i class="ph ph-share-network text-lg"></i> Partager
             </button>
             <button onclick="openSettingsModal()" class="flex items-center gap-2 text-sm bg-white/20 hover:bg-white/30 px-3 py-1.5 rounded transition font-medium backdrop-blur-md">
-                <i class="ph ph-gear-six text-lg"></i> Paramètres
+                <i class="ph ph-gear-six text-lg"></i> Configuration
             </button>
-            <button onclick="resetBoard()" class="flex items-center gap-2 text-sm bg-red-500/70 hover:bg-red-500/90 px-3 py-1.5 rounded transition font-medium text-white backdrop-blur-md">
-                <i class="ph ph-trash text-lg"></i> Réinitialiser
+            
+            <button onclick="leaveBoard()" class="flex items-center gap-2 text-sm bg-amber-500/70 hover:bg-amber-500/90 px-3 py-1.5 rounded transition font-medium text-white backdrop-blur-md">
+                <i class="ph ph-door-open text-lg"></i> Quitter
+            </button>
+            <button onclick="deleteBoardAction()" class="flex items-center gap-2 text-sm bg-red-600/80 hover:bg-red-600 px-3 py-1.5 rounded transition font-medium text-white backdrop-blur-md shadow-sm">
+                <i class="ph ph-trash text-lg"></i> Supprimer
             </button>
         </div>
     </header>
@@ -67,7 +83,7 @@
     </div>
 
     <div id="confirm-modal" class="fixed inset-0 bg-black/60 hidden z-[70] flex items-center justify-center backdrop-blur-sm modal-animate">
-        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center animate-pop-in">
             <div class="w-12 h-12 rounded-full bg-red-100 text-red-500 flex items-center justify-center mx-auto mb-4" id="confirm-icon">
                 <i class="ph-bold ph-warning text-2xl"></i>
             </div>
@@ -80,45 +96,76 @@
         </div>
     </div>
 
-    <div id="settings-modal" class="fixed inset-0 bg-black/60 hidden z-[60] flex items-center justify-center backdrop-blur-sm" onclick="closeSettingsModal(event)">
-        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden modal-animate flex flex-col max-h-[85vh]">
-            <div class="p-4 border-b border-slate-100 flex justify-between items-center bg-slate-50">
-                <h3 class="font-bold text-slate-700 flex items-center gap-2"><i class="ph-fill ph-gear-six"></i> Paramètres du tableau</h3>
-                <button onclick="closeSettingsModal(null, true)" class="text-slate-400 hover:text-red-500 transition"><i class="ph ph-x-circle text-2xl"></i></button>
+    <div id="settings-modal" class="fixed inset-0 bg-black/60 hidden z-[60] flex items-center justify-center backdrop-blur-sm animate-fade-in" onclick="closeSettingsModal(event)">
+    
+        <div class="bg-white w-full max-w-lg rounded-2xl shadow-2xl relative overflow-hidden flex flex-col max-h-[85vh] animate-pop-in">
+            
+            <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-cyan-500 z-10"></div>
+
+            <button onclick="closeSettingsModal(null, true)" class="absolute top-4 right-4 text-slate-400 hover:text-red-500 transition z-10 bg-white/50 rounded-full p-1 hover:bg-red-50">
+                <i class="ph ph-x text-xl"></i>
+            </button>
+
+            <div class="pt-8 pb-2 px-8 text-center flex-shrink-0">
+                <div class="w-16 h-16 rounded-full bg-slate-50 text-slate-600 flex items-center justify-center mx-auto mb-4 border border-slate-100 shadow-sm">
+                    <i class="ph-fill ph-sliders-horizontal text-3xl"></i>
+                </div>
+                <h3 class="text-xl font-bold text-slate-800 mb-1">Configuration</h3>
+                <p class="text-sm text-slate-500">Gérez les étiquettes et les membres de l'équipe.</p>
             </div>
-            <div class="p-6 overflow-y-auto space-y-8">
-                <div>
-                    <h4 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4">Gérer les étiquettes</h4>
+
+            <div class="p-8 overflow-y-auto custom-scrollbar space-y-8">
+                
+                <div class="bg-slate-50/50 rounded-xl p-5 border border-slate-100">
+                    <h4 class="text-xs font-bold text-blue-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <i class="ph-bold ph-tag"></i> Étiquettes
+                    </h4>
+                    
                     <div id="settings-labels-list" class="space-y-2 mb-4"></div>
-                    <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                        <div class="flex gap-2 mb-2">
-                            <input type="text" id="new-label-name" placeholder="Nom de l'étiquette..." class="flex-1 px-3 py-1.5 text-sm rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none">
-                            <button onclick="addNewLabel()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-700">Ajouter</button>
+
+                    <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                        <div class="flex gap-2 mb-3">
+                            <input type="text" id="new-label-name" placeholder="Nom de l'étiquette..." class="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-100 outline-none transition bg-slate-50 focus:bg-white">
+                            <button onclick="addNewLabel()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 shadow-lg shadow-blue-500/20 transition">
+                                <i class="ph-bold ph-plus"></i>
+                            </button>
                         </div>
-                        <div class="flex gap-2 flex-wrap" id="label-color-picker"></div>
+                        <div class="flex gap-2 flex-wrap justify-center" id="label-color-picker"></div>
                         <input type="hidden" id="selected-label-color" value="blue">
                     </div>
                 </div>
-                <hr class="border-slate-100">
-                <div>
-                    <h4 class="text-sm font-bold text-slate-900 uppercase tracking-wide mb-4">Gérer l'équipe</h4>
+
+                <div class="border-t border-slate-100"></div>
+
+                <div class="bg-slate-50/50 rounded-xl p-5 border border-slate-100">
+                    <h4 class="text-xs font-bold text-indigo-500 uppercase tracking-widest mb-4 flex items-center gap-2">
+                        <i class="ph-bold ph-users"></i> Membres
+                    </h4>
+                    
                     <div id="settings-members-list" class="space-y-2 mb-4"></div>
-                    <div class="bg-slate-50 p-3 rounded-lg border border-slate-200">
-                         <div class="flex gap-2 mb-2">
-                            <input type="text" id="new-member-name" placeholder="Nom du membre..." class="flex-1 px-3 py-1.5 text-sm rounded border border-slate-300 focus:ring-2 focus:ring-blue-500 outline-none">
-                            <button onclick="addNewMember()" class="bg-blue-600 text-white px-3 py-1.5 rounded text-sm font-bold hover:bg-blue-700">Ajouter</button>
+
+                    <div class="bg-white p-3 rounded-xl border border-slate-200 shadow-sm">
+                        <div class="flex gap-2">
+                            <input type="text" id="new-member-name" placeholder="Nom du membre..." class="flex-1 px-3 py-2 text-sm rounded-lg border border-slate-200 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-100 outline-none transition bg-slate-50 focus:bg-white">
+                            <button onclick="addNewMember()" class="bg-indigo-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-500/20 transition">
+                                <i class="ph-bold ph-plus"></i>
+                            </button>
                         </div>
                     </div>
                 </div>
+
             </div>
-            <div class="p-4 bg-slate-50 border-t border-slate-100 text-right">
-                <button onclick="closeSettingsModal(null, true)" class="bg-white border border-slate-300 text-slate-700 hover:bg-slate-50 px-4 py-2 rounded-lg text-sm font-medium transition">Terminé</button>
+            
+            <div class="p-4 bg-slate-50 border-t border-slate-100 text-center flex-shrink-0">
+                <button onclick="closeSettingsModal(null, true)" class="w-full bg-white border border-slate-200 text-slate-600 hover:bg-slate-100 hover:text-slate-800 font-bold py-3 rounded-xl transition shadow-sm">
+                    Terminé
+                </button>
             </div>
         </div>
     </div>
 
     <div id="modal-overlay" class="fixed inset-0 bg-black/60 hidden z-50 flex items-center justify-center backdrop-blur-sm" onclick="closeModal(event)">
-        <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden modal-animate flex flex-col max-h-[90vh]">
+        <div class="bg-white w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] animate-pop-in">
             <div class="p-4 border-b border-slate-100 flex justify-between items-start bg-slate-50">
                 <div class="w-full mr-4">
                     <label class="block text-xs font-bold text-slate-500 uppercase mb-1">Titre de la carte</label>
@@ -156,6 +203,117 @@
                 <button onclick="closeModal(null, true)" class="text-slate-500 hover:bg-slate-200 px-4 py-2 rounded-lg text-sm font-medium transition">Annuler</button>
                 <button onclick="saveCardFromModal()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg text-sm font-bold shadow-lg shadow-blue-500/30 transition">Enregistrer</button>
             </div>
+        </div>
+    </div>
+
+    <div id="landing-modal" class="fixed inset-0 z-[80] flex items-center justify-center hidden">
+    
+        <div class="absolute inset-0 bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 animate-gradient-xy"></div>
+        
+        <div class="absolute top-1/4 left-1/4 w-96 h-96 bg-blue-400/30 rounded-full blur-3xl pointer-events-none mix-blend-overlay"></div>
+        <div class="absolute bottom-1/4 right-1/4 w-96 h-96 bg-pink-400/30 rounded-full blur-3xl pointer-events-none mix-blend-overlay"></div>
+
+        <div class="w-full max-w-md p-8 relative z-10 text-center animate-fade-in-up 
+                    bg-white/20 backdrop-blur-xl border border-white/30 
+                    rounded-3xl shadow-[0_8px_32px_0_rgba(31,38,135,0.37)]">
+            
+            <div class="mb-6 flex justify-center">
+                <div class="p-2 bg-white/20 rounded-full border border-white/40 shadow-inner backdrop-blur-sm overflow-hidden">
+                    <img src="logo.png" alt="Logo Tralalero" class="w-24 h-24 object-cover rounded-full drop-shadow-md">
+                </div>
+            </div>
+            
+            <h1 class="text-3xl font-bold text-white mb-2 drop-shadow-sm tracking-tight">Tralalero Tralala</h1>
+            <p class="text-blue-50 mb-8 font-medium text-sm tracking-wide">Trello... Mais en mieux ! </p>
+
+            <div class="space-y-4 mb-8">
+                <div class="mb-6">
+                    <label class="block text-blue-100/70 text-xs font-bold uppercase tracking-widest mb-3">Code du tableau</label>
+                    <div id="otp-container" class="flex gap-2 justify-center">
+                        <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-2xl font-bold bg-black/20 border border-white/10 rounded-xl focus:ring-2 focus:ring-white/50 focus:bg-black/30 focus:border-white/50 outline-none transition text-white shadow-inner uppercase placeholder-white/10" data-index="0">
+                        <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-2xl font-bold bg-black/20 border border-white/10 rounded-xl focus:ring-2 focus:ring-white/50 focus:bg-black/30 focus:border-white/50 outline-none transition text-white shadow-inner uppercase placeholder-white/10" data-index="1">
+                        <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-2xl font-bold bg-black/20 border border-white/10 rounded-xl focus:ring-2 focus:ring-white/50 focus:bg-black/30 focus:border-white/50 outline-none transition text-white shadow-inner uppercase placeholder-white/10" data-index="2">
+                        <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-2xl font-bold bg-black/20 border border-white/10 rounded-xl focus:ring-2 focus:ring-white/50 focus:bg-black/30 focus:border-white/50 outline-none transition text-white shadow-inner uppercase placeholder-white/10" data-index="3">
+                        <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-2xl font-bold bg-black/20 border border-white/10 rounded-xl focus:ring-2 focus:ring-white/50 focus:bg-black/30 focus:border-white/50 outline-none transition text-white shadow-inner uppercase placeholder-white/10" data-index="4">
+                        <input type="text" maxlength="1" class="otp-input w-12 h-14 text-center text-2xl font-bold bg-black/20 border border-white/10 rounded-xl focus:ring-2 focus:ring-white/50 focus:bg-black/30 focus:border-white/50 outline-none transition text-white shadow-inner uppercase placeholder-white/10" data-index="5">
+                    </div>
+                </div>
+
+                <p id="join-error" class="text-red-200 bg-red-500/20 border border-red-500/30 text-sm hidden font-medium mt-4 py-2 px-3 rounded-lg backdrop-blur-md"></p>
+            </div>
+
+            <div id="history-container" class="hidden mb-6 text-left animate-fade-in-up relative z-50">
+                <label class="block text-blue-100/70 text-xs font-bold uppercase tracking-widest mb-2 pl-1">
+                    <i class="ph-bold ph-clock-counter-clockwise mr-1"></i> Récents
+                </label>
+                
+                <button onclick="toggleHistoryDropdown()" id="history-trigger" class="w-full flex items-center justify-between bg-black/20 hover:bg-black/30 text-white border border-white/10 rounded-xl px-4 py-3 outline-none focus:ring-2 focus:ring-white/50 transition cursor-pointer font-medium text-sm shadow-inner group">
+                    <span id="history-selected-text" class="opacity-80">Reprendre un projet</span>
+                    <i class="ph-bold ph-caret-down text-white/50 group-hover:text-white transition"></i>
+                </button>
+
+                <div id="history-dropdown" class="hidden absolute top-full left-0 right-0 mt-2 bg-slate-800 border border-slate-700 rounded-xl shadow-2xl overflow-hidden max-h-60 overflow-y-auto custom-scrollbar transform origin-top transition-all duration-200">
+    
+                    <div id="history-list-items" class="flex flex-col p-1"></div>
+                </div>
+            </div>
+
+            <div class="relative flex py-2 items-center opacity-70">
+                <div class="flex-grow border-t border-white/30"></div>
+                <span class="flex-shrink-0 mx-4 text-white text-xs uppercase font-bold tracking-wider drop-shadow">Ou</span>
+                <div class="flex-grow border-t border-white/30"></div>
+            </div>
+
+            <div class="mt-6">
+                <button onclick="createNewBoardAction()" 
+                        class="w-full bg-white text-indigo-600 font-bold py-3 rounded-xl shadow-xl 
+                            hover:bg-blue-50 hover:scale-[1.02] transition-all duration-300 
+                            flex items-center justify-center gap-2 group border-2 border-transparent">
+                    <i class="ph-bold ph-plus-circle text-xl group-hover:rotate-90 transition-transform duration-300"></i>
+                    Créer un nouveau tableau
+                </button>
+            </div>
+        </div>
+        
+        <div class="absolute bottom-6 text-white/40 text-xs font-medium tracking-widest uppercase">
+            Designed with <i class="ph-fill ph-heart text-pink-400 mx-1"></i> & Glass
+        </div>
+    </div>
+
+    <div id="share-modal" class="fixed inset-0 bg-black/60 hidden z-[90] flex items-center justify-center backdrop-blur-sm modal-animate" onclick="closeShareModal(event)">
+        <div class="bg-white w-full max-w-sm rounded-2xl shadow-2xl p-6 text-center relative overflow-hidden animate-pop-in">
+            
+            <div class="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
+
+            <button onclick="closeShareModal(null, true)" class="absolute top-4 right-4 text-slate-400 hover:text-slate-600 transition">
+                <i class="ph ph-x text-xl"></i>
+            </button>
+
+            <div class="w-16 h-16 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-4 border border-blue-100 shadow-sm">
+                <i class="ph-fill ph-share-network text-3xl"></i>
+            </div>
+
+            <h3 class="text-xl font-bold text-slate-800 mb-2">Inviter des collaborateurs</h3>
+            
+            <p class="text-sm text-slate-500 mb-6 leading-relaxed">
+                Partagez ce code avec vos collègues. Ils devront le saisir sur l'écran d'accueil pour rejoindre le projet.
+            </p>
+
+            <div class="bg-slate-100 border-2 border-dashed border-slate-300 rounded-xl p-4 mb-6 relative group cursor-pointer hover:border-blue-400 hover:bg-blue-50 transition" onclick="copyCodeAction()">
+                <p class="text-xs uppercase font-bold text-slate-400 mb-1 tracking-wider">Code du projet</p>
+                <div id="share-code-display" class="text-3xl font-mono font-black text-slate-800 tracking-widest select-all">
+                    ------
+                </div>
+                <div class="absolute inset-0 flex items-center justify-center bg-white/60 opacity-0 group-hover:opacity-100 transition backdrop-blur-[1px]">
+                    <span class="text-blue-600 font-bold text-sm flex items-center gap-1">
+                        <i class="ph-bold ph-copy"></i> Copier
+                    </span>
+                </div>
+            </div>
+
+            <button onclick="copyCodeAction()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 rounded-xl shadow-lg shadow-blue-500/30 flex items-center justify-center gap-2 transition transform active:scale-95">
+                <i class="ph-bold ph-copy"></i> Copier le code
+            </button>
         </div>
     </div>
 <script src="script.js"></script>
