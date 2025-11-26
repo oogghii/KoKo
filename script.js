@@ -1,30 +1,17 @@
 /**
-     * SUPABASE CONFIG & INIT
-     *
-     * Expects:
-     *  - __supabase_url (string)
-     *  - __supabase_key (string)
-     *  - __app_id (optional, fallback to 'default-app-id')
-     *
-     * Data model used:
-     *  Table: boards
-     *  Columns: id (text PK), app_id (text), board_data (jsonb), settings (jsonb), created_at (timestamptz), updated_at (timestamptz)
-     *
-     * Note: ensure your Supabase table `boards` exists and anon key has R/W or configure Row Level Security accordingly.
-     */
-
+ * SUPABASE CONFIG & INIT
+ */
 const SUPABASE_URL = (typeof __supabase_url !== 'undefined') ? __supabase_url : 'https://emanyobeiadjfpnwrzku.supabase.co';
 const SUPABASE_KEY = (typeof __supabase_key !== 'undefined') ? __supabase_key : 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImVtYW55b2JlaWFkamZwbndyemt1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjQxMzI4OTEsImV4cCI6MjA3OTcwODg5MX0.CDRCDpbuscHFPx4XD-HT73btAZAazugZWePegTRv6iM';
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 
-// createClient detection: UMD could expose different globals; be robust
+// createClient detection
 let createClientFn = null;
 if (window.supabase && typeof window.supabase.createClient === 'function') {
     createClientFn = window.supabase.createClient;
 } else if (window.Supabase && typeof window.Supabase.createClient === 'function') {
     createClientFn = window.Supabase.createClient;
 } else if (window.createClient) {
-    // unlikely, but fallback
     createClientFn = window.createClient;
 }
 
@@ -39,9 +26,10 @@ const TABLE_NAME = 'boards';
 
 // State
 let currentBoardId = null;
-let boardData = []; // Will be synced from Supabase
-let settings = {};  // Will be synced from Supabase
-let realtimeChannel = null; // subscription channel
+let boardData = []; 
+let settings = {};  
+let realtimeChannel = null; 
+let lastMutationId = null; 
 
 /**
  * INITIALIZATION
@@ -55,41 +43,25 @@ async function init() {
 }
 
 function setupBoard() {
-    // 1. On regarde s'il y a déjà un ID après le # (ex: #XY12Z9)
-    // .substring(1) sert à enlever le caractère '#' pour ne garder que le code
     const hash = window.location.hash.substring(1);
-
     if (hash && hash.length > 0) {
-        // Si un ID existe, on l'utilise
         currentBoardId = hash;
     } else {
-        // 2. Sinon, on génère un nouvel ID de 6 caractères majuscules
         currentBoardId = generateId();
-        
-        // On met à jour l'URL (ça ajoute le # sans recharger la page)
         window.location.hash = currentBoardId;
     }
-
-    // On se connecte à Supabase avec cet ID
     connectToBoard(currentBoardId);
 }
 
 async function connectToBoard(boardId) {
-    // Cleanup old realtime channel
     if (realtimeChannel) {
         try {
-            if (typeof supabase.removeChannel === 'function') {
-                supabase.removeChannel(realtimeChannel);
-            } else if (typeof realtimeChannel.unsubscribe === 'function') {
-                realtimeChannel.unsubscribe();
-            }
-        } catch (e) {
-            console.warn('Error removing previous Supabase channel', e);
-        }
+            if (typeof supabase.removeChannel === 'function') supabase.removeChannel(realtimeChannel);
+            else if (typeof realtimeChannel.unsubscribe === 'function') realtimeChannel.unsubscribe();
+        } catch (e) { console.warn(e); }
         realtimeChannel = null;
     }
 
-    // Try to fetch the board row
     try {
         const { data, error } = await supabase
             .from(TABLE_NAME)
@@ -100,21 +72,14 @@ async function connectToBoard(boardId) {
         document.getElementById('loading-spinner').classList.add('hidden');
         document.getElementById('add-col-container').classList.remove('hidden');
 
-        if (error && error.code === 'PGRST116') {
-            // 'no rows' style error varies - we'll treat as not found
-        }
-
         if (data) {
             boardData = data.board_data || [];
             settings = data.settings || defaultSettings;
             renderBoard();
 
-            // If modals are open, refresh them to show new data
             if(!document.getElementById('settings-modal').classList.contains('hidden')) renderSettingsList();
             if(currentEditCardId && !document.getElementById('modal-overlay').classList.contains('hidden')) renderModalSidebars();
-
         } else {
-            // No row found -> initialize a new board
             boardData = defaultBoardData;
             settings = defaultSettings;
             await initializeNewBoard(boardId);
@@ -124,40 +89,41 @@ async function connectToBoard(boardId) {
         showToast('Error connecting to server', 'red');
     }
 
-    // Subscribe to realtime changes for this board row
+    // Subscribe to realtime changes
     try {
-        // Use Postgres changes subscription
         realtimeChannel = supabase.channel('public:boards:' + boardId)
             .on(
                 'postgres_changes',
                 { event: '*', schema: 'public', table: TABLE_NAME, filter: `id=eq.${boardId}` },
                 (payload) => {
-                    // payload has .eventType and .new / .old
-                    // Update local state when row is inserted/updated/deleted
                     const eventType = payload.eventType;
                     const newRow = payload.new;
+
                     if (eventType === 'INSERT' || eventType === 'UPDATE') {
                         if (newRow) {
+                            // --- PREDICTION LOGIC (Echo Suppression) ---
+                            const serverMutationId = newRow.settings ? newRow.settings.lastMutationId : null;
+                            if (serverMutationId && serverMutationId === lastMutationId) {
+                                // Echo detecté : on ne fait rien car l'UI est déjà à jour localement !
+                                return;
+                            }
+                            // -------------------------------------------
+
                             boardData = newRow.board_data || [];
                             settings = newRow.settings || defaultSettings;
                             renderBoard();
 
-                            // refresh settings/modal if open
                             if(!document.getElementById('settings-modal').classList.contains('hidden')) renderSettingsList();
                             if(currentEditCardId && !document.getElementById('modal-overlay').classList.contains('hidden')) renderModalSidebars();
                         }
                     } else if (eventType === 'DELETE') {
-                        // Board deleted - show create/reset
                         boardData = defaultBoardData;
                         settings = defaultSettings;
                         renderBoard();
                     }
                 }
             )
-            .subscribe(status => {
-                // Optional: debug status
-                // console.log('realtime status', status);
-            });
+            .subscribe();
     } catch (e) {
         console.warn('Realtime subscribe error', e);
     }
@@ -173,26 +139,22 @@ async function initializeNewBoard(boardId) {
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
         };
-        const { data, error } = await supabase.from(TABLE_NAME).insert([row]).select().single();
-        if (error) {
-            console.error('Failed initializing new board:', error);
-            showToast('Failed initializing board', 'red');
-        } else {
-            // successful insert — onSnapshot will pick it up when realtime fires
-            console.log('New board initialized');
-        }
+        await supabase.from(TABLE_NAME).insert([row]).select().single();
+        console.log('New board initialized');
     } catch (err) {
         console.error('Error inserting new board', err);
-        showToast('Failed to initialize board', 'red');
     }
 }
 
-// Save function writes to Supabase (upsert)
 async function saveToFirebase() {
     if (!supabase || !currentBoardId) return;
 
-    // Visual sync indicator
     document.getElementById('sync-status').classList.remove('hidden');
+
+    const mutationId = generateId();
+    lastMutationId = mutationId;
+    if(!settings) settings = {};
+    settings.lastMutationId = mutationId;
 
     const payload = {
         id: currentBoardId,
@@ -203,12 +165,11 @@ async function saveToFirebase() {
     };
 
     try {
-        const { data, error } = await supabase.from(TABLE_NAME).upsert(payload, { returning: 'minimal' });
+        const { error } = await supabase.from(TABLE_NAME).upsert(payload, { returning: 'minimal' });
         if (error) {
             console.error('Save failed', error);
             showToast('Failed to save changes', 'red');
         } else {
-            // small delay to show sync
             setTimeout(() => {
                 document.getElementById('sync-status').classList.add('hidden');
             }, 500);
@@ -220,14 +181,14 @@ async function saveToFirebase() {
 }
 
 /**
- * DEFAULT DATA (Fallbacks)
+ * DEFAULT DATA
  */
 const defaultBoardData = [
     {
         id: 'col-1',
         title: 'A faire!',
         cards: [
-            { id: 'card-1', content: 'Salut! 👋', description: 'Clique sur partager pour travailler à plusieurs sur ce "KoKo".', labels: ['l1'], members: ['m1'] },
+            { id: 'card-1', content: 'Salut! 👋', description: 'Clique sur partager pour travailler à plusieurs sur ce "Tralalero".', labels: ['l1'], members: ['m1'] },
         ]
     },
     { id: 'col-2', title: 'Fait!', cards: [] },
@@ -284,14 +245,12 @@ function getInitials(name) {
 
 function shareBoard() {
     const url = window.location.href;
-    // Use a temp textarea to copy to clipboard (more reliable in iframes)
     const el = document.createElement('textarea');
     el.value = url;
     document.body.appendChild(el);
     el.select();
     document.execCommand('copy');
     document.body.removeChild(el);
-
     showToast("Link copied to clipboard!", "green");
 }
 
@@ -299,13 +258,11 @@ function showToast(msg, color = "green") {
     const toast = document.getElementById('toast');
     const text = document.getElementById('toast-message');
     text.innerText = msg;
-    // Basic styling based on intent
     if(color === "red") {
         toast.querySelector('i').className = "ph-fill ph-warning-circle text-red-400";
     } else {
          toast.querySelector('i').className = "ph-fill ph-check-circle text-green-400";
     }
-
     toast.classList.remove('opacity-0', 'translate-y-4');
     setTimeout(() => {
          toast.classList.add('opacity-0', 'translate-y-4');
@@ -354,17 +311,22 @@ function closeConfirmModal() {
  */
 function renderBoard() {
     const boardEl = document.getElementById('board');
-    // Remove existing columns (elements with data-col-id)
     const addBtnContainer = document.getElementById('add-col-container');
     const existingCols = boardEl.querySelectorAll('[data-col-id]');
     existingCols.forEach(el => el.remove());
 
     boardData.forEach((col) => {
         const colEl = document.createElement('div');
-        colEl.className = 'flex-shrink-0 w-72 flex flex-col max-h-full';
+        colEl.className = 'flex-shrink-0 w-72 flex flex-col max-h-full transition-transform duration-200';
         colEl.setAttribute('data-col-id', col.id);
+        
+        // --- DRAG & DROP FOR COLUMNS ---
+        colEl.draggable = true;
+        colEl.addEventListener('dragstart', handleColDragStart);
+        colEl.addEventListener('dragend', handleColDragEnd);
         colEl.addEventListener('dragover', handleDragOver);
         colEl.addEventListener('drop', handleDrop);
+        // -------------------------------
 
         colEl.innerHTML = `
             <div class="bg-white/20 backdrop-blur-md rounded-xl shadow-lg flex flex-col max-h-full border border-white/40">
@@ -566,6 +528,7 @@ function saveCardFromModal() {
     card.description = document.getElementById('modal-desc-input').value.trim();
     card.labels = tempLabels; card.members = tempMembers;
     saveToFirebase(); closeModal(null, true);
+    renderBoard(); // Update UI immediately
 }
 function deleteCardFromModal() {
     if(!currentEditCardId) return;
@@ -573,50 +536,211 @@ function deleteCardFromModal() {
         const col = boardData.find(c => c.id === currentEditColId);
         col.cards = col.cards.filter(c => c.id !== currentEditCardId);
         saveToFirebase(); closeModal(null, true);
+        renderBoard(); // Update UI immediately
     });
 }
 function closeModal(e, force) { if(force || e.target.id === 'modal-overlay') { document.getElementById('modal-overlay').classList.add('hidden'); currentEditCardId = null; } }
 
 /**
- * BASIC ACTIONS
+ * BASIC ACTIONS (FIXED: Added renderBoard() everywhere)
  */
 function showAddColumnInput(btn) { btn.classList.add('hidden'); document.getElementById('add-col-form').classList.remove('hidden'); document.getElementById('new-col-title').focus(); }
 function hideAddColumnInput() { document.getElementById('add-col-form').classList.add('hidden'); document.getElementById('add-col-btn').classList.remove('hidden'); document.getElementById('new-col-title').value = ''; }
+
 function createColumn() {
     const title = document.getElementById('new-col-title').value.trim(); if (!title) return;
     boardData.push({ id: 'col-' + generateId(), title: title, cards: [] });
+    renderBoard(); // <--- FIX: Show instantly
     saveToFirebase(); hideAddColumnInput();
 }
-function deleteColumn(colId) { showConfirm("Delete List?", "This will delete the list and cards.", () => { boardData = boardData.filter(c => c.id !== colId); saveToFirebase(); }); }
-function updateColumnTitle(colId, val) { const col = boardData.find(c => c.id === colId); if(val.trim()) { col.title = val; saveToFirebase(); } else renderBoard(); }
+
+function deleteColumn(colId) { 
+    showConfirm("Delete List?", "This will delete the list and cards.", () => { 
+        boardData = boardData.filter(c => c.id !== colId); 
+        renderBoard(); // <--- FIX: Show instantly
+        saveToFirebase(); 
+    }); 
+}
+
+function updateColumnTitle(colId, val) { 
+    const col = boardData.find(c => c.id === colId); 
+    if(val.trim()) { 
+        col.title = val; 
+        saveToFirebase(); 
+        // No render needed here as input is already updating visually
+    } else {
+        renderBoard(); 
+    }
+}
+
 function showAddCardInput(colId) { document.getElementById(`add-card-btn-${colId}`).classList.add('hidden'); document.getElementById(`add-card-form-${colId}`).classList.remove('hidden'); const i = document.getElementById(`input-card-${colId}`); i.focus(); i.onkeydown = (e) => { if(e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); addCard(colId); }}; }
 function hideAddCardInput(colId) { document.getElementById(`add-card-btn-${colId}`).classList.remove('hidden'); document.getElementById(`add-card-form-${colId}`).classList.add('hidden'); document.getElementById(`input-card-${colId}`).value = ''; }
-function addCard(colId) { const val = document.getElementById(`input-card-${colId}`).value.trim(); if(!val) return; const col = boardData.find(c => c.id === colId); col.cards.push({ id: 'card-' + generateId(), content: val, description: "", labels: [], members: [] }); saveToFirebase(); hideAddCardInput(colId); }
+
+function addCard(colId) { 
+    const val = document.getElementById(`input-card-${colId}`).value.trim(); 
+    if(!val) return; 
+    const col = boardData.find(c => c.id === colId); 
+    col.cards.push({ id: 'card-' + generateId(), content: val, description: "", labels: [], members: [] }); 
+    renderBoard(); // <--- FIX: Show instantly
+    saveToFirebase(); 
+    hideAddCardInput(colId); 
+}
 
 function resetBoard() {
     showConfirm("Reset Board?", "This will wipe the current board data.", () => {
          boardData = defaultBoardData; settings = defaultSettings;
+         renderBoard(); // <--- FIX: Show instantly
          saveToFirebase();
     });
 }
 
 /**
- * DRAG & DROP
+ * DRAG & DROP SYSTEM (Cards + Columns)
  */
-let draggedCardId=null, sourceColId=null;
-function handleDragStart(e) { draggedCardId = this.getAttribute('data-card-id'); sourceColId = this.getAttribute('data-col-id'); this.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; }
-function handleDragEnd(e) { this.classList.remove('dragging'); document.querySelectorAll('.card-ghost').forEach(el => el.remove()); draggedCardId = null; }
-function handleDragOver(e) { e.preventDefault(); const container = this.querySelector('div[id^="cards-"]'); const after = getDragAfterElement(container, e.clientY); let ghost = document.querySelector('.card-ghost'); if(!ghost) { ghost = document.createElement('div'); ghost.className = 'card-ghost'; } if(after) container.insertBefore(ghost, after); else container.appendChild(ghost); }
-function handleDrop(e) {
-    e.preventDefault(); const destColId = this.getAttribute('data-col-id'); const container = this.querySelector('div[id^="cards-"]'); const ghost = document.querySelector('.card-ghost'); const index = Array.from(container.children).indexOf(ghost);
-    if(draggedCardId && destColId) {
-        const sCol = boardData.find(c => c.id === sourceColId); const card = sCol.cards.find(c => c.id === draggedCardId);
-        sCol.cards = sCol.cards.filter(c => c.id !== draggedCardId);
-        const dCol = boardData.find(c => c.id === destColId); dCol.cards.splice(index, 0, card);
-        saveToFirebase();
+let draggedCardId = null;
+let draggedColId = null;
+let draggedType = null; // 'CARD' or 'COL'
+let sourceColId = null;
+
+// --- COLUMNS ---
+function handleColDragStart(e) {
+    if (e.target.tagName === 'TEXTAREA' || e.target.tagName === 'BUTTON' || e.target.closest('button')) {
+        e.preventDefault();
+        return;
+    }
+    draggedType = 'COL';
+    draggedColId = this.getAttribute('data-col-id');
+    this.classList.add('opacity-50', 'scale-95'); 
+    e.dataTransfer.effectAllowed = 'move';
+}
+
+function handleColDragEnd(e) {
+    this.classList.remove('opacity-50', 'scale-95');
+    draggedColId = null;
+    draggedType = null;
+    renderBoard();
+}
+
+// --- CARDS ---
+function handleDragStart(e) {
+    e.stopPropagation(); 
+    draggedType = 'CARD';
+    draggedCardId = this.getAttribute('data-card-id');
+    sourceColId = this.getAttribute('data-col-id');
+    this.classList.add('dragging');
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', draggedCardId);
+}
+
+function handleDragEnd(e) {
+    this.classList.remove('dragging');
+    document.querySelectorAll('.card-ghost').forEach(el => el.remove());
+    draggedCardId = null;
+    draggedType = null;
+}
+
+// --- COMMON DROP ZONE ---
+function handleDragOver(e) {
+    e.preventDefault();
+    
+    // 1. Dragging a CARD
+    if (draggedType === 'CARD') {
+        const container = this.querySelector('div[id^="cards-"]');
+        if (!container) return; 
+
+        const after = getDragAfterCard(container, e.clientY);
+        let ghost = document.querySelector('.card-ghost');
+        if (!ghost) {
+            ghost = document.createElement('div');
+            ghost.className = 'card-ghost h-10 bg-slate-100/50 border-2 border-dashed border-slate-300 rounded-lg mb-2 mx-1';
+        }
+        if (after) {
+            container.insertBefore(ghost, after);
+        } else {
+            container.appendChild(ghost);
+        }
+    } 
+    // 2. Dragging a COLUMN (SWAP / HIT-TEST Logic)
+    else if (draggedType === 'COL') {
+        const boardEl = document.getElementById('board');
+        const target = e.target.closest('[data-col-id]');
+        const draggingCol = document.querySelector(`[data-col-id="${draggedColId}"]`);
+        
+        if (target && draggingCol && target !== draggingCol) {
+            const children = Array.from(boardEl.children);
+            const dragIdx = children.indexOf(draggingCol);
+            const targetIdx = children.indexOf(target);
+
+            if (dragIdx < targetIdx) {
+                boardEl.insertBefore(draggingCol, target.nextElementSibling);
+            } else {
+                boardEl.insertBefore(draggingCol, target);
+            }
+        }
     }
 }
-function getDragAfterElement(container, y) { const draggables = [...container.querySelectorAll('[draggable]:not(.dragging)')]; return draggables.reduce((closest, child) => { const box = child.getBoundingClientRect(); const offset = y - box.top - box.height / 2; if(offset < 0 && offset > closest.offset) return { offset: offset, element: child }; else return closest; }, { offset: Number.NEGATIVE_INFINITY }).element; }
+
+function handleDrop(e) {
+    e.preventDefault();
+    
+    // 1. Dropping a CARD
+    if (draggedType === 'CARD' && draggedCardId && sourceColId) {
+        const destColId = this.getAttribute('data-col-id');
+        const container = this.querySelector('div[id^="cards-"]');
+        const ghost = document.querySelector('.card-ghost');
+        
+        let newIndex = 0;
+        if (container && ghost) {
+            newIndex = Array.from(container.children).indexOf(ghost);
+            ghost.remove(); 
+        }
+
+        const sCol = boardData.find(c => c.id === sourceColId);
+        const card = sCol.cards.find(c => c.id === draggedCardId);
+        
+        sCol.cards = sCol.cards.filter(c => c.id !== draggedCardId);
+        const dCol = boardData.find(c => c.id === destColId);
+        
+        if (newIndex < 0 || newIndex > dCol.cards.length) {
+            dCol.cards.push(card);
+        } else {
+            dCol.cards.splice(newIndex, 0, card);
+        }
+        
+        saveToFirebase();
+        renderBoard();
+    }
+    
+    // 2. Dropping a COLUMN
+    else if (draggedType === 'COL' && draggedColId) {
+        const boardEl = document.getElementById('board');
+        const allCols = Array.from(boardEl.querySelectorAll('[data-col-id]'));
+        const newIndex = allCols.findIndex(el => el.getAttribute('data-col-id') === draggedColId);
+        
+        if (newIndex >= 0) {
+            const colItem = boardData.find(c => c.id === draggedColId);
+            const oldData = boardData.filter(c => c.id !== draggedColId);
+            oldData.splice(newIndex, 0, colItem);
+            
+            boardData = oldData;
+            saveToFirebase();
+        }
+    }
+}
+
+// Helpers
+function getDragAfterCard(container, y) {
+    const draggables = [...container.querySelectorAll('[data-card-id]:not(.dragging)')];
+    return draggables.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        if (offset < 0 && offset > closest.offset) {
+            return { offset: offset, element: child };
+        } else {
+            return closest;
+        }
+    }, { offset: Number.NEGATIVE_INFINITY }).element;
+}
 
 // Start App
 init();
